@@ -36,12 +36,25 @@ class local_quizjsonservice_external extends external_api
         // Fetch questions in the order of their slots
         foreach ($slots as $slot) {
             $question_attempt = $attemptobj->get_question_attempt($slot);
-            $summary = $question_attempt->get_response_summary();
             $question = $question_attempt->get_question();
-            // Obter o resumo das respostas
 
+            // Get the question summary from the question_attempts table
+            $questionsummary = $DB->get_field('question_attempts', 'questionsummary', array('id' => $question_attempt->get_database_id()));
+
+            // Extract the order of answers from the questionsummary
+            $summary_lines = explode("\n", $questionsummary);
+            array_shift($summary_lines); // Remove the first line (question text)
+
+            $orderData = [];
+            foreach ($summary_lines as $line) {
+                $orderData[] = trim(substr($line, 2)); // Remove ": " prefix and trim
+            }
+
+            // var_dump($orderData);
+            // exit;
 
             // Prepare and shuffle answers
+            $order = [];
             $answers = [];
             $rightanswerid = null;
             foreach ($question->answers as $choice => $answer) {
@@ -50,7 +63,6 @@ class local_quizjsonservice_external extends external_api
                 }
 
                 $answers[] = array(
-                    'choice' => $choice,
                     'id' => $answer->id,
                     'answer' => strip_tags(format_text($answer->answer, FORMAT_MOODLE)),
                     'fraction' => $answer->fraction,
@@ -58,12 +70,27 @@ class local_quizjsonservice_external extends external_api
                 );
             }
 
+            // Reorder answers based on the order extracted from questionsummary
+            // Reorder answers based on response summary
+            $ordered_answers = [];
+            $index = 0;
+            foreach ($orderData as $response) {
+                foreach ($answers as $answer) {
+                    if ($answer['answer'] === $response) {
+                        $answer['choice'] = $index;
+                        $index++;
+                        $ordered_answers[] = $answer;
+                        break;
+                    }
+                }
+            }
+
             $questions[] = array(
                 'slot' => $slot,
                 'questionid' => $question->id,
                 'questiontext' => strip_tags(format_text($question->questiontext, $question->questiontextformat)),
-                'answers' => $answers,
-                'summary' => $summary,
+                'answers' => $ordered_answers,
+                'summary' => '$order',
                 'rightanswerid' => $rightanswerid,
                 'rightanswer' => strip_tags(format_text($question_attempt->get_right_answer_summary())),
             );

@@ -1,1 +1,0 @@
-a:4:{s:10:"pluginname";s:12:"Quiz Checker";s:23:"quizchecker:description";s:70:"Retrieve quizzes from a course and check if the user has started them.";s:23:"quizchecker:has_started";s:11:"Has started";s:23:"quizchecker:not_started";s:11:"Not started";}
