@@ -4,6 +4,7 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once("$CFG->libdir/externallib.php");
 require_once("$CFG->dirroot/mod/quiz/locallib.php");
+require_once($CFG->dirroot . '/mod/quiz/attemptlib.php');
 
 class local_quizchecker_external extends external_api
 {
@@ -43,6 +44,33 @@ class local_quizchecker_external extends external_api
             $attempts_data = array();
 
             foreach ($attempts as $attempt) {
+                $questions_count = $DB->count_records('quiz_slots', array('quizid' => $quiz->id));
+
+                // Initialize counters
+                $incorrect_answers_count = 0;
+                $correct_answers_count = 0;
+                $total_questions = 0;
+
+                // Retrieve the quiz attempt object
+                $quizattempt = quiz_attempt::create($attempt->id);
+
+                // Loop through each slot (question) in the quiz attempt
+                foreach ($quizattempt->get_slots() as $slot) {
+                    $question_attempt = $quizattempt->get_question_attempt($slot);
+
+                    // Check if the question attempt is correct
+                    if ($question_attempt->get_fraction() > 0) {
+                        $correct_answers_count++;
+                    } else {
+                        $incorrect_answers_count++;
+                    }
+
+                    $total_questions++;
+                }
+
+                // Calculate percentage correct
+                $percentage_correct = ($total_questions > 0) ? ($correct_answers_count / $total_questions) * 100 : 0;
+
                 $attempts_data[] = array(
                     'attemptid' => $attempt->id,
                     'userid' => $attempt->userid,
@@ -59,6 +87,10 @@ class local_quizchecker_external extends external_api
                     'timemodifiedoffline' => $attempt->timemodifiedoffline,
                     'timecheckstate' => $attempt->timecheckstate,
                     'sumgrades' => $attempt->sumgrades,
+                    'total_questions' => $total_questions,
+                    'correct_answers_count' => $correct_answers_count,
+                    'incorrect_answers_count' => $incorrect_answers_count,
+                    'percentage_correct' => $percentage_correct
                 );
             }
 
@@ -103,6 +135,10 @@ class local_quizchecker_external extends external_api
                                 'timemodifiedoffline' => new external_value(PARAM_INT, 'Time modified offline'),
                                 'timecheckstate' => new external_value(PARAM_INT, 'Time check state'),
                                 'sumgrades' => new external_value(PARAM_FLOAT, 'Sum of grades achieved'),
+                                'total_questions' => new external_value(PARAM_INT, 'Number of questions in the quiz'),
+                                'correct_answers_count' => new external_value(PARAM_INT, 'Number of correct answers'),
+                                'incorrect_answers_count' => new external_value(PARAM_INT, 'Number of incorrect answers'),
+                                'percentage_correct' => new external_value(PARAM_FLOAT, 'Percentage correct')
                             )
                         )
                     ),

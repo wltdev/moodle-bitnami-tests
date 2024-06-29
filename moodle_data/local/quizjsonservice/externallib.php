@@ -30,6 +30,10 @@ class local_quizjsonservice_external extends external_api
         $attemptobj = quiz_attempt::create($attempt->id);
 
         $questions = array();
+        $correct_answers_count = 0;
+        $incorrect_answers_count = 0;
+        $total_questions = 0;
+
         // Get all slots in the order they were created
         $slots = $attemptobj->get_slots();
 
@@ -50,11 +54,7 @@ class local_quizjsonservice_external extends external_api
                 $orderData[] = trim(substr($line, 2)); // Remove ": " prefix and trim
             }
 
-            // var_dump($orderData);
-            // exit;
-
             // Prepare and shuffle answers
-            $order = [];
             $answers = [];
             $rightanswerid = null;
             foreach ($question->answers as $choice => $answer) {
@@ -71,7 +71,6 @@ class local_quizjsonservice_external extends external_api
             }
 
             // Reorder answers based on the order extracted from questionsummary
-            // Reorder answers based on response summary
             $ordered_answers = [];
             $index = 0;
             foreach ($orderData as $response) {
@@ -85,16 +84,30 @@ class local_quizjsonservice_external extends external_api
                 }
             }
 
+            $user_responses = $question_attempt->get_response_summary();
+            $is_correct = $question_attempt->get_fraction() > 0;
+            if ($is_correct) {
+                $correct_answers_count++;
+            } else {
+                $incorrect_answers_count++;
+            }
+
+            $total_questions++;
+
             $questions[] = array(
                 'slot' => $slot,
                 'questionid' => $question->id,
                 'questiontext' => strip_tags(format_text($question->questiontext, $question->questiontextformat)),
                 'answers' => $ordered_answers,
-                'summary' => '$order',
+                'summary' => $questionsummary,
                 'rightanswerid' => $rightanswerid,
                 'rightanswer' => strip_tags(format_text($question_attempt->get_right_answer_summary())),
+                'user_responses' => $user_responses,
+                'is_correct' => $is_correct
             );
         }
+
+        $percentage_correct = ($total_questions > 0) ? ($correct_answers_count / $total_questions) * 100 : 0;
 
         $data = array(
             'attempt' => array(
@@ -113,12 +126,17 @@ class local_quizjsonservice_external extends external_api
                 'timemodifiedoffline' => $attempt->timemodifiedoffline,
                 'timecheckstate' => $attempt->timecheckstate,
                 'sumgrades' => $attempt->sumgrades,
-                'questions' => $questions
+                'questions' => $questions,
+                'total_questions' => $total_questions,
+                'correct_answers_count' => $correct_answers_count,
+                'incorrect_answers_count' => $incorrect_answers_count,
+                'percentage_correct' => $percentage_correct
             ),
         );
 
         return $data;
     }
+
 
 
     public static function get_attempt_data_parameters()
@@ -169,9 +187,17 @@ class local_quizjsonservice_external extends external_api
                                     ),
                                     'rightanswerid' => new external_value(PARAM_INT, 'Right answer ID', VALUE_OPTIONAL),
                                     'rightanswer' => new external_value(PARAM_RAW, 'Right answer summary'),
+                                    'user_responses' => new external_value(PARAM_RAW, 'User responses'),
+                                    'is_correct' => new external_value(PARAM_BOOL, 'Is correct'),
+                                    // 'user_responses' => $user_responses,
+                                    // 'is_correct' => $is_correct
                                 )
                             )
-                        )
+                        ),
+                        'total_questions' => new external_value(PARAM_INT, 'Total number of questions'),
+                        'correct_answers_count' => new external_value(PARAM_INT, 'Number of correct answers'),
+                        'incorrect_answers_count' => new external_value(PARAM_INT, 'Number of incorrect answers'),
+                        'percentage_correct' => new external_value(PARAM_FLOAT, 'Percentage correct'),
                     ),
                 ),
             )
