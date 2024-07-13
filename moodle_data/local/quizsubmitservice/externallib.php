@@ -14,6 +14,7 @@ class local_quizsubmit_external extends external_api
         return new external_function_parameters(
             array(
                 'attemptid' => new external_value(PARAM_INT, 'ID da tentativa'),
+                'tofinish' => new external_value(PARAM_BOOL, 'Se a tentativa deve ser finalizada', VALUE_OPTIONAL, false),
                 'responses' => new external_multiple_structure(
                     new external_single_structure(
                         array(
@@ -21,20 +22,29 @@ class local_quizsubmit_external extends external_api
                             'response' => new external_value(PARAM_RAW, 'Resposta do usuário'),
                             'slot' => new external_value(PARAM_INT, 'Slot da questão')
                         )
-                    )
+                    ),
+                    'Respostas do usuário',
+                    VALUE_OPTIONAL,
+                    []
                 )
             )
         );
     }
 
-    public static function process_attempt($attemptid, $responses)
+    public static function process_attempt($attemptid, $tofinish = false, $responses = array())
     {
         global $DB, $USER;
         // Validar parâmetros.
         $params = self::validate_parameters(self::process_attempt_parameters(), array(
             'attemptid' => $attemptid,
+            'tofinish' => $tofinish,
             'responses' => $responses
         ));
+
+        // Verifica se o parâmetro 'tofinish' está presente. Se não estiver, define-o como false.
+        if (!isset($params['tofinish'])) {
+            $params['tofinish'] = false;
+        }
 
         // Inicializar um array para coletar erros
         $errors = array();
@@ -103,45 +113,49 @@ class local_quizsubmit_external extends external_api
                 }
             }
 
-
-            // Atualizar estado da tentativa para 'finished' e salvar os pontos
-            $attempt = quiz_attempt::create($params['attemptid']);
-            $attempt->process_finish(time(), true);
-            // Commitar transação
             $transaction->allow_commit();
 
-            // Recalcula a nota.
-            $grade = quiz_rescale_grade($attempt->get_sum_marks(), $attempt->get_quiz());
+            if ($params['tofinish']) {
+                $attempt = quiz_attempt::create($params['attemptid']);
+                $attempt->process_finish(time(), true);
+                // Commitar transação
 
-            // Calcular a posição da nota do usuário
-            $quizid = $attempt->get_quizid();
-            $grades = $DB->get_records_sql(
-                "SELECT qg.grade
-             FROM {quiz_grades} qg
-             WHERE qg.quiz = :quizid
-             ORDER BY qg.grade DESC",
-                array('quizid' => $quizid)
-            );
+                // Recalcula a nota.
+                $grade = quiz_rescale_grade($attempt->get_sum_marks(), $attempt->get_quiz());
 
-            $grades = array_values($grades);
-            $userGrade = $grade;
+                // Calcular a posição da nota do usuário
+                $quizid = $attempt->get_quizid();
+                $grades = $DB->get_records_sql(
+                    "SELECT qg.grade
+                 FROM {quiz_grades} qg
+                 WHERE qg.quiz = :quizid
+                 ORDER BY qg.grade DESC",
+                    array('quizid' => $quizid)
+                );
 
-            // Encontra a posição da nota do usuário
-            $position = 0;
-            foreach ($grades as $index => $gradeRecord) {
-                if ($gradeRecord->grade <= $userGrade) {
-                    $position = $index + 1;
-                    break;
+                $grades = array_values($grades);
+                $userGrade = $grade;
+
+                // Encontra a posição da nota do usuário
+                $position = 0;
+                foreach ($grades as $index => $gradeRecord) {
+                    if ($gradeRecord->grade <= $userGrade) {
+                        $position = $index + 1;
+                        break;
+                    }
                 }
+
+                $percentile = ($position / count($grades)) * 100;
             }
 
-            $percentile = ($position / count($grades)) * 100;
+
+            // Atualizar estado da tentativa para 'finished' e salvar os pontos
 
             return array(
                 'status' => 'success',
                 'message' => 'Tentativa processada com sucesso.',
-                'total_points' => $grade,
-                'percentile' => $percentile
+                'total_points' => $grade ?? '',
+                'percentile' => $percentile ?? ''
             );
         } catch (moodle_exception $e) {
             return array(
