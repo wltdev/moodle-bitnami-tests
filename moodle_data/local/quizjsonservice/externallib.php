@@ -22,7 +22,6 @@ class local_quizjsonservice_external extends external_api
         // Validate context
         $context = context_module::instance($cm->id);
         self::validate_context($context);
-
         // Check user capability
         require_capability('mod/quiz:reviewmyattempts', $context);
 
@@ -40,6 +39,12 @@ class local_quizjsonservice_external extends external_api
         // Fetch questions in the order of their slots
         foreach ($slots as $slot) {
             $question_attempt = $attemptobj->get_question_attempt($slot);
+
+            // print_r('dbid: ' . $question_attempt->get_database_id());
+            // print_r('usageid: ' . $question_attempt->get_usage_id());
+            // print_r(get_class_methods($question_attempt));
+            // exit;
+
             $question = $question_attempt->get_question();
 
             // Get the question summary from the question_attempts table
@@ -54,7 +59,7 @@ class local_quizjsonservice_external extends external_api
                 $orderData[] = trim(substr($line, 2)); // Remove ": " prefix and trim
             }
 
-            // Prepare and shuffle answers
+            // Prepare answers
             $answers = [];
             $rightanswerid = null;
             foreach ($question->answers as $choice => $answer) {
@@ -85,6 +90,35 @@ class local_quizjsonservice_external extends external_api
             }
 
             $user_responses = $question_attempt->get_response_summary();
+
+            if (!$user_responses) {
+
+                $question_attempt_id = $question_attempt->get_database_id();
+
+                $sql = "
+                    SELECT qasd.*
+                    FROM {question_attempt_step_data} qasd
+                    JOIN {question_attempt_steps} qas ON qas.id = qasd.attemptstepid
+                    WHERE qas.questionattemptid = :questionattemptid
+                    AND qasd.name = 'answer'
+                    ORDER BY qas.sequencenumber DESC
+                    LIMIT 1
+                ";
+
+                $params = array('questionattemptid' => $question_attempt_id);
+                $latest_step_data = $DB->get_record_sql($sql, $params);
+
+
+                if ($latest_step_data) {
+                    foreach ($ordered_answers as $answer) {
+                        if ($answer['choice'] == $latest_step_data->value) {
+                            $user_responses = strip_tags(format_text($answer['answer']));
+                            break;
+                        }
+                    }
+                }
+            }
+
             $is_correct = $question_attempt->get_fraction() > 0;
             if ($is_correct) {
                 $correct_answers_count++;
@@ -94,12 +128,43 @@ class local_quizjsonservice_external extends external_api
 
             $total_questions++;
 
+            $questiontextUrls = file_rewrite_pluginfile_urls($question->questiontext, 'pluginfile.php', $question->contextid, 'question', 'questiontext', $question->id);
+            preg_match_all('/<img[^>]+src="([^">]+)"/i', $questiontextUrls, $imageMatches);
+
+            $imageUrl = null;
+
+            if (!empty($imageMatches[1]) && isset($imageMatches[1][0])) {
+                // Check if the URL starts with @@PLUGINFILE@@
+                // Check if the URL starts with @@PLUGINFILE@@
+                if (strpos($imageMatches[1][0], '@@PLUGINFILE@@') === 0) {
+                    // Replace @@PLUGINFILE@@ with the correct path
+                    $imageUrl = str_replace('@@PLUGINFILE@@', $CFG->wwwroot . '/pluginfile.php', $imageMatches[1][0]);
+
+                    // Ensure the URL includes the correct context and item ID
+                    $contextid = $question->contextid; // Adjust based on the context ID
+                    $itemid = $question->id; // Adjust based on the item ID
+
+                    // Construct the final URL
+                    $imageUrl = $CFG->wwwroot . '/pluginfile.php/' . $contextid . '/question/questiontext/' . $itemid . '/1' . $imageUrl;
+                } elseif (strpos($imageMatches[1][0], 'http') === 0) {
+                    // If URL is relative, prepend the Moodle root URL
+                    $imageUrl = ltrim($imageMatches[1][0], '/');
+                }
+            }
+
+            $questiontext = strip_tags(format_text($question->questiontext, $question->questiontextformat));
+
+            if ($imageUrl) {
+                $questiontext .= "{image:{$imageUrl}}";
+            }
+
             $questions[] = array(
                 'slot' => $slot,
                 'questionid' => $question->id,
-                'questiontext' => strip_tags(format_text($question->questiontext, $question->questiontextformat)),
+                'questiontext' => $questiontext,
                 'answers' => $ordered_answers,
                 'summary' => $questionsummary,
+                'generalfeedback' => strip_tags(format_text($question->generalfeedback, FORMAT_MOODLE)),
                 'rightanswerid' => $rightanswerid,
                 'rightanswer' => strip_tags(format_text($question_attempt->get_right_answer_summary())),
                 'user_responses' => $user_responses,
@@ -174,6 +239,7 @@ class local_quizjsonservice_external extends external_api
                                     'questionid' => new external_value(PARAM_INT, 'Question ID'),
                                     'questiontext' => new external_value(PARAM_RAW, 'Question text'),
                                     'summary' => new external_value(PARAM_RAW, 'Question summary'),
+                                    'generalfeedback' => new external_value(PARAM_RAW, 'General feedback'),
                                     'answers' => new external_multiple_structure(
                                         new external_single_structure(
                                             array(

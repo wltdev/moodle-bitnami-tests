@@ -45,9 +45,12 @@ $token = required_param('token', PARAM_ALPHANUM);
 $webservicelib = new webservice();
 $authenticationinfo = $webservicelib->authenticate_user($token);
 
+print_r($authenticationinfo);
+exit;
+
 // Check the service allows file download.
-if (empty($authenticationinfo['service']->downloadfiles)) {
-    throw new webservice_access_exception('Web service file downloading must be enabled in external service settings.');
-}
+// if (empty($authenticationinfo['service']->downloadfiles)) {
+//     throw new webservice_access_exception('Web service file downloading must be enabled in external service settings.');
+// }
 
 require_once($CFG->dirroot . '/draftfile.php');

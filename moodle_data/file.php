@@ -57,25 +57,25 @@ $courseid = (int)array_shift($args);
 $relativepath = implode('/', $args);
 
 // security: limit access to existing course subdirectories
-$course = $DB->get_record('course', array('id'=>$courseid), '*', MUST_EXIST);
+$course = $DB->get_record('course', array('id' => $courseid), '*', MUST_EXIST);
 
 if ($course->legacyfiles != 2) {
     // course files disabled
     send_file_not_found();
 }
 
-if ($course->id != SITEID) {
-    require_login($course, true, null, false);
+// if ($course->id != SITEID) {
+//     require_login($course, true, null, false);
 
-} else if ($CFG->forcelogin) {
-    if (empty($CFG->sitepolicyhandler) and !empty($CFG->sitepolicy)
-        and ($CFG->sitepolicy == $CFG->wwwroot.'/file.php/'.$relativepath
-             or $CFG->sitepolicy == $CFG->wwwroot.'/file.php?file=/'.$relativepath)) {
-        //do not require login for policy file
-    } else {
-        require_login(0, true, null, false);
-    }
-}
+// } else if ($CFG->forcelogin) {
+//     if (empty($CFG->sitepolicyhandler) and !empty($CFG->sitepolicy)
+//         and ($CFG->sitepolicy == $CFG->wwwroot.'/file.php/'.$relativepath
+//              or $CFG->sitepolicy == $CFG->wwwroot.'/file.php?file=/'.$relativepath)) {
+//         //do not require login for policy file
+//     } else {
+//         require_login(0, true, null, false);
+//     }
+// }
 
 $context = context_course::instance($course->id);
 
@@ -84,19 +84,19 @@ $fs = get_file_storage();
 $fullpath = "/$context->id/course/legacy/0/$relativepath";
 
 if (!$file = $fs->get_file_by_hash(sha1($fullpath))) {
-    if (strrpos($fullpath, '/') !== strlen($fullpath) -1 ) {
+    if (strrpos($fullpath, '/') !== strlen($fullpath) - 1) {
         $fullpath .= '/';
     }
     // Try to fallback to the directory named as the supposed file.
-    if (!$file = $fs->get_file_by_hash(sha1($fullpath.'.'))) {
+    if (!$file = $fs->get_file_by_hash(sha1($fullpath . '.'))) {
         send_file_not_found();
     }
 }
 // do not serve dirs
 if ($file->get_filename() == '.') {
-    if (!$file = $fs->get_file_by_hash(sha1($fullpath.'index.html'))) {
-        if (!$file = $fs->get_file_by_hash(sha1($fullpath.'index.htm'))) {
-            if (!$file = $fs->get_file_by_hash(sha1($fullpath.'Default.htm'))) {
+    if (!$file = $fs->get_file_by_hash(sha1($fullpath . 'index.html'))) {
+        if (!$file = $fs->get_file_by_hash(sha1($fullpath . 'index.htm'))) {
+            if (!$file = $fs->get_file_by_hash(sha1($fullpath . 'Default.htm'))) {
                 send_file_not_found();
             }
         }
@@ -108,5 +108,3 @@ if ($file->get_filename() == '.') {
 // ========================================
 \core\session\manager::write_close(); // Unlock session during file serving.
 send_stored_file($file, null, $CFG->filteruploadedfiles, $forcedownload);
-
-

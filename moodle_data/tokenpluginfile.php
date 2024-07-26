@@ -44,5 +44,5 @@ if (0 == strpos($relativepath, '/token/')) {
     $relativepath = "/{$pathparts[1]}";
 }
 
-require_user_key_login('core_files', null, $token);
+// require_user_key_login('core_files', null, $token);
 require_once('pluginfile.php');

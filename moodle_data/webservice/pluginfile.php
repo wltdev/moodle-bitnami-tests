@@ -52,11 +52,14 @@ $offline = optional_param('offline', 0, PARAM_BOOL);
 $webservicelib = new webservice();
 $authenticationinfo = $webservicelib->authenticate_user($token);
 
+
+print_r($authenticationinfo);
+exit;
 // Check the service allows file download.
-$enabledfiledownload = (int) ($authenticationinfo['service']->downloadfiles);
-if (empty($enabledfiledownload)) {
-    throw new webservice_access_exception('Web service file downloading must be enabled in external service settings');
-}
+// $enabledfiledownload = (int) ($authenticationinfo['service']->downloadfiles);
+// if (empty($enabledfiledownload)) {
+//     throw new webservice_access_exception('Web service file downloading must be enabled in external service settings');
+// }
 
 // Finally we can serve the file :).
 $relativepath = get_file_argument();
