@@ -91,6 +91,9 @@ class local_quizjsonservice_external extends external_api
 
             $user_responses = $question_attempt->get_response_summary();
 
+            $is_correct = $question_attempt->get_fraction() > 0;
+
+            // Get latest user response when attempt is not yet completed
             if (!$user_responses) {
 
                 $question_attempt_id = $question_attempt->get_database_id();
@@ -113,13 +116,14 @@ class local_quizjsonservice_external extends external_api
                     foreach ($ordered_answers as $answer) {
                         if ($answer['choice'] == $latest_step_data->value) {
                             $user_responses = strip_tags(format_text($answer['answer']));
+                            $is_correct = $answer['fraction'] > 0;
+
                             break;
                         }
                     }
                 }
             }
 
-            $is_correct = $question_attempt->get_fraction() > 0;
             if ($is_correct) {
                 $correct_answers_count++;
             } else {
