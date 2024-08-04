@@ -34,64 +34,71 @@ class local_quizsubmit_external extends external_api
     public static function process_attempt($attemptid, $tofinish = false, $responses = array())
     {
         global $DB, $USER;
-        // Validar parâmetros.
+
+        // Debugging output
+        debugging("process_attempt called with attemptid: $attemptid, tofinish: $tofinish, responses: " . json_encode($responses));
+
+        // Validate parameters
         $params = self::validate_parameters(self::process_attempt_parameters(), array(
             'attemptid' => $attemptid,
             'tofinish' => $tofinish,
             'responses' => $responses
         ));
 
+        // More debugging output
+        debugging("Validated parameters: " . json_encode($params));
+
         // Verifica se o parâmetro 'tofinish' está presente. Se não estiver, define-o como false.
         if (!isset($params['tofinish'])) {
             $params['tofinish'] = false;
         }
 
-        // Inicializar um array para coletar erros
+        // Initialize an array to collect errors
         $errors = array();
 
         try {
-            // Verificar se a tentativa existe
+            // Check if the attempt exists
             if (!$DB->record_exists('quiz_attempts', array('id' => $params['attemptid']))) {
                 throw new moodle_exception('attemptnotfound', 'local_storequizresponses', '', $params['attemptid']);
             }
 
-            // Iniciar transação
+            // Start transaction
             $transaction = $DB->start_delegated_transaction();
 
             foreach ($params['responses'] as $response) {
                 try {
-                    // Verificar se a questão existe
+                    // Check if the question exists
                     if (!$DB->record_exists('question', array('id' => $response['questionid']))) {
-                        $errors[] = "Questão com ID {$response['questionid']} não encontrada.";
+                        $errors[] = "Question with ID {$response['questionid']} not found.";
                         continue;
                     }
 
-                    // Buscar a tentativa da questão
+                    // Fetch the question attempt
                     $question_attempt = $DB->get_record('question_attempts', array('questionusageid' => $params['attemptid'], 'slot' => $response['slot']), '*', IGNORE_MULTIPLE);
 
-                    // Buscar o último passo da tentativa da questão
+                    // Fetch the latest step of the question attempt
                     $latest_step = $DB->get_record_sql(
                         '
-                    SELECT *
-                    FROM {question_attempt_steps}
-                    WHERE questionattemptid = :questionattemptid AND userid = :userid
-                    ORDER BY sequencenumber DESC
-                    LIMIT 1',
+                        SELECT *
+                        FROM {question_attempt_steps}
+                        WHERE questionattemptid = :questionattemptid AND userid = :userid
+                        ORDER BY sequencenumber DESC
+                        LIMIT 1',
                         array('questionattemptid' => $question_attempt->id, 'userid' => $USER->id)
                     );
 
-                    // Criar objeto para inserir um novo passo da tentativa da questão
+                    // Create object to insert a new step of the question attempt
                     $newStepData = new stdClass();
                     $newStepData->questionattemptid = $question_attempt->id;
-                    $newStepData->sequencenumber = $latest_step ? $latest_step->sequencenumber + 1 : 1; // Definir o número da sequência
-                    $newStepData->state = 'complete'; // Marcar como completa
+                    $newStepData->sequencenumber = $latest_step ? $latest_step->sequencenumber + 1 : 1; // Set the sequence number
+                    $newStepData->state = 'complete'; // Mark as complete
                     $newStepData->timecreated = time();
                     $newStepData->userid = $USER->id;
 
-                    // Inserir novo passo da tentativa da questão
+                    // Insert new step of the question attempt
                     $newStepId = $DB->insert_record('question_attempt_steps', $newStepData, true);
 
-                    // Salvar a resposta na tentativa da questão
+                    // Save the response in the question attempt
                     $record = new stdClass();
                     $record->attemptstepid = $newStepId;
                     $record->name = 'answer';
@@ -107,7 +114,7 @@ class local_quizsubmit_external extends external_api
                 } catch (Exception $e) {
                     $errors[] = array(
                         'status' => false,
-                        'error' => $e->getMessage(),
+                        'errors' => $e->getMessage(),
                     );
                     $transaction->rollback($e);
                 }
@@ -118,25 +125,25 @@ class local_quizsubmit_external extends external_api
             if ($params['tofinish']) {
                 $attempt = quiz_attempt::create($params['attemptid']);
                 $attempt->process_finish(time(), true);
-                // Commitar transação
+                // Commit transaction
 
-                // Recalcula a nota.
+                // Recalculate the grade
                 $grade = quiz_rescale_grade($attempt->get_sum_marks(), $attempt->get_quiz());
 
-                // Calcular a posição da nota do usuário
+                // Calculate the user's grade position
                 $quizid = $attempt->get_quizid();
                 $grades = $DB->get_records_sql(
                     "SELECT qg.grade
-                 FROM {quiz_grades} qg
-                 WHERE qg.quiz = :quizid
-                 ORDER BY qg.grade DESC",
+                     FROM {quiz_grades} qg
+                     WHERE qg.quiz = :quizid
+                     ORDER BY qg.grade DESC",
                     array('quizid' => $quizid)
                 );
 
                 $grades = array_values($grades);
                 $userGrade = $grade;
 
-                // Encontra a posição da nota do usuário
+                // Find the user's grade position
                 $position = 0;
                 foreach ($grades as $index => $gradeRecord) {
                     if ($gradeRecord->grade <= $userGrade) {
@@ -148,19 +155,17 @@ class local_quizsubmit_external extends external_api
                 $percentile = ($position / count($grades)) * 100;
             }
 
-
-            // Atualizar estado da tentativa para 'finished' e salvar os pontos
-
+            // Return the result
             return array(
                 'status' => 'success',
-                'message' => 'Tentativa processada com sucesso.',
+                'message' => 'Attempt processed successfully.',
                 'total_points' => $grade ?? '',
                 'percentile' => $percentile ?? ''
             );
         } catch (moodle_exception $e) {
             return array(
                 'status' => false,
-                'error' => $e->getMessage(),
+                'errors' => $e->getMessage(),
                 'debuginfo' => $e->debuginfo,
             );
         } catch (Exception $e) {
@@ -170,31 +175,31 @@ class local_quizsubmit_external extends external_api
             );
         }
 
-        // Retornar erros, se houver
+        // Return errors, if any
         if (!empty($errors)) {
-            return array('status' => 'error', 'message' => 'Ocorreram alguns erros.', 'errors' => $errors);
+            return array('status' => 'error', 'message' => 'Some errors occurred.', 'errors' => $errors);
         }
 
-        return array('status' => 'success', 'message' => 'Respostas armazenadas com sucesso.');
+        return array('status' => 'success', 'message' => 'Responses stored successfully.');
     }
 
     public static function process_attempt_returns()
     {
         return new external_single_structure(
             array(
-                'status' => new external_value(PARAM_TEXT, 'Status da operação'),
-                'message' => new external_value(PARAM_TEXT, 'Mensagem de retorno'),
-                'total_points' => new external_value(PARAM_RAW, 'Total de pontos obtidos'),
-                'percentile' => new external_value(PARAM_RAW, 'Total em percentil de pontos obtidos em relação aos outros alunos'),
+                'status' => new external_value(PARAM_TEXT, 'Status of the operation'),
+                'message' => new external_value(PARAM_TEXT, 'Return message'),
+                'total_points' => new external_value(PARAM_RAW, 'Total points obtained', VALUE_OPTIONAL),
+                'percentile' => new external_value(PARAM_RAW, 'Total percentile of points obtained relative to other students', VALUE_OPTIONAL),
                 'errors' => new external_multiple_structure(
                     new external_single_structure(
                         array(
-                            'status' => new external_value(PARAM_BOOL, 'Status do erro'),
-                            'error' => new external_value(PARAM_TEXT, 'Mensagem de erro'),
-                            'debuginfo' => new external_value(PARAM_TEXT, 'Informações de debug', VALUE_OPTIONAL)
+                            'status' => new external_value(PARAM_BOOL, 'Error status'),
+                            'error' => new external_value(PARAM_TEXT, 'Error message'),
+                            'debuginfo' => new external_value(PARAM_TEXT, 'Debug information', VALUE_OPTIONAL)
                         )
                     ),
-                    'Lista de erros',
+                    'List of errors',
                     VALUE_OPTIONAL
                 )
             )
