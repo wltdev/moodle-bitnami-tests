@@ -14,6 +14,7 @@ class local_quizsubmit_external extends external_api
         return new external_function_parameters(
             array(
                 'attemptid' => new external_value(PARAM_INT, 'ID da tentativa'),
+                'uniqueid' => new external_value(PARAM_INT, 'ID Unico da tentativa'),
                 'tofinish' => new external_value(PARAM_BOOL, 'Se a tentativa deve ser finalizada', VALUE_OPTIONAL, false),
                 'responses' => new external_multiple_structure(
                     new external_single_structure(
@@ -31,7 +32,7 @@ class local_quizsubmit_external extends external_api
         );
     }
 
-    public static function process_attempt($attemptid, $tofinish = false, $responses = array())
+    public static function process_attempt($attemptid, $uniqueid, $tofinish = false, $responses = array())
     {
         global $DB, $USER;
 
@@ -41,6 +42,7 @@ class local_quizsubmit_external extends external_api
         // Validate parameters
         $params = self::validate_parameters(self::process_attempt_parameters(), array(
             'attemptid' => $attemptid,
+            'uniqueid' => $uniqueid,
             'tofinish' => $tofinish,
             'responses' => $responses
         ));
@@ -58,8 +60,8 @@ class local_quizsubmit_external extends external_api
 
         try {
             // Check if the attempt exists
-            if (!$DB->record_exists('quiz_attempts', array('uniqueid' => $params['attemptid']))) {
-                throw new moodle_exception('attemptnotfound', 'local_storequizresponses', '', $params['attemptid']);
+            if (!$DB->record_exists('quiz_attempts', array('uniqueid' => $params['uniqueid']))) {
+                throw new moodle_exception('attemptnotfound', 'local_storequizresponses', '', $params['uniqueid']);
             }
 
             // Start transaction
@@ -74,12 +76,12 @@ class local_quizsubmit_external extends external_api
                     }
 
                     // Fetch the question attempt
-                    $question_attempt = $DB->get_record('question_attempts', array('questionusageid' => $params['attemptid'], 'slot' => $response['slot']), '*', IGNORE_MULTIPLE);
+                    $question_attempt = $DB->get_record('question_attempts', array('questionusageid' => $params['uniqueid'], 'slot' => $response['slot']), '*', IGNORE_MULTIPLE);
 
                     if (!$question_attempt) {
                         // No matching question attempt found, create a new one
                         $newQuestionAttempt = new stdClass();
-                        $newQuestionAttempt->questionusageid = $params['attemptid'];
+                        $newQuestionAttempt->questionusageid = $params['uniqueid'];
                         $newQuestionAttempt->slot = $response['slot'];
                         $newQuestionAttempt->behaviour = 'deferredfeedback'; // Set the default behaviour
                         $newQuestionAttempt->questionid = $response['questionid'];
