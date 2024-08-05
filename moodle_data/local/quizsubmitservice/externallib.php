@@ -58,7 +58,7 @@ class local_quizsubmit_external extends external_api
 
         try {
             // Check if the attempt exists
-            if (!$DB->record_exists('quiz_attempts', array('id' => $params['attemptid']))) {
+            if (!$DB->record_exists('quiz_attempts', array('uniqueid' => $params['attemptid']))) {
                 throw new moodle_exception('attemptnotfound', 'local_storequizresponses', '', $params['attemptid']);
             }
 
@@ -75,6 +75,27 @@ class local_quizsubmit_external extends external_api
 
                     // Fetch the question attempt
                     $question_attempt = $DB->get_record('question_attempts', array('questionusageid' => $params['attemptid'], 'slot' => $response['slot']), '*', IGNORE_MULTIPLE);
+
+                    if (!$question_attempt) {
+                        // No matching question attempt found, create a new one
+                        $newQuestionAttempt = new stdClass();
+                        $newQuestionAttempt->questionusageid = $params['attemptid'];
+                        $newQuestionAttempt->slot = $response['slot'];
+                        $newQuestionAttempt->behaviour = 'deferredfeedback'; // Set the default behaviour
+                        $newQuestionAttempt->questionid = $response['questionid'];
+                        $newQuestionAttempt->variant = 1; // Default variant
+                        $newQuestionAttempt->maxmark = 1.0; // Default max mark, you can change as needed
+                        $newQuestionAttempt->minfraction = 0.0; // Default minimum fraction
+                        $newQuestionAttempt->flagged = 0; // Default flag state
+                        $newQuestionAttempt->questionsummary = ''; // Default summary
+                        $newQuestionAttempt->rightanswer = ''; // Default right answer
+                        $newQuestionAttempt->responsesummary = ''; // Default response summary
+                        $newQuestionAttempt->timemodified = time(); // Current time
+
+                        $question_attempt_id = $DB->insert_record('question_attempts', $newQuestionAttempt);
+                        $question_attempt = $DB->get_record('question_attempts', array('id' => $question_attempt_id));
+                    }
+
 
                     // Fetch the latest step of the question attempt
                     $latest_step = $DB->get_record_sql(
@@ -163,12 +184,14 @@ class local_quizsubmit_external extends external_api
                 'percentile' => $percentile ?? ''
             );
         } catch (moodle_exception $e) {
+            print_r($e);
             return array(
                 'status' => false,
                 'errors' => $e->getMessage(),
                 'debuginfo' => $e->debuginfo,
             );
         } catch (Exception $e) {
+            print_r($e);
             return array(
                 'status' => false,
                 'errors' => $e->getMessage(),
@@ -177,6 +200,7 @@ class local_quizsubmit_external extends external_api
 
         // Return errors, if any
         if (!empty($errors)) {
+            print_r($errors);
             return array('status' => 'error', 'message' => 'Some errors occurred.', 'errors' => $errors);
         }
 
