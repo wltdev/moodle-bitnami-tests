@@ -129,14 +129,14 @@ class local_quizsubmit_external extends external_api
                     $DB->insert_record('question_attempt_step_data', $record);
                 } catch (moodle_exception $e) {
                     $errors[] = array(
-                        'status' => false,
+                        'status' => 'error',
                         'error' => $e->getMessage(),
                         'debuginfo' => $e->debuginfo,
                     );
                     $transaction->rollback($e);
                 } catch (Exception $e) {
                     $errors[] = array(
-                        'status' => false,
+                        'status' => 'error',
                         'errors' => $e->getMessage(),
                     );
                     $transaction->rollback($e);
@@ -188,14 +188,14 @@ class local_quizsubmit_external extends external_api
         } catch (moodle_exception $e) {
             print_r($e);
             return array(
-                'status' => false,
+                'status' => 'error',
                 'errors' => $e->getMessage(),
                 'debuginfo' => $e->debuginfo,
             );
         } catch (Exception $e) {
             print_r($e);
             return array(
-                'status' => false,
+                'status' => 'error',
                 'errors' => $e->getMessage(),
             );
         }
